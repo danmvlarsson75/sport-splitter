@@ -1,0 +1,14 @@
+bin/
+obj/
+.vs/
+*.user
+
+# Generated icon PNGs (recreated by gen_icons.py)
+icons/*.png
+
+# WebView2 user data (sessions, cookies)
+BrowserData/
+
+# Icon/config generator scripts
+gen_icons.py
+make_ico.py
