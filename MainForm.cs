@@ -198,21 +198,30 @@ public class MainForm : Form
         y += 28;
 
         // Size form to fit all content, capped at screen working area
-        int sbW    = SystemInformation.VerticalScrollBarWidth;
-        int formW  = W + sbW;
+        int sbW   = SystemInformation.VerticalScrollBarWidth;
+        int formW = W + sbW;
         var screen = Screen.PrimaryScreen!.WorkingArea;
-        int formH  = Math.Min(y + 8, screen.Height - 32);
-        ClientSize = new Size(formW, formH);
+
+        // Set ClientSize once to let WinForms establish the non-client area (title bar + borders),
+        // then use the actual non-client height to compute the correct maximum client height.
+        ClientSize = new Size(formW, y + 8);
+        int nonClientH  = Height - ClientSize.Height;
+        int maxClientH  = screen.Height - nonClientH - 16;
+        if (ClientSize.Height > maxClientH)
+            ClientSize = new Size(formW, maxClientH);
 
         // Allow free resize in both directions
         MinimumSize = new Size(320, 300);
-        MaximumSize = Size.Empty; // no maximum
+        MaximumSize = Size.Empty;
 
         scroll.Dock = DockStyle.Fill;
         scroll.AutoScrollMinSize = new Size(0, y);
         Controls.Add(scroll);
 
-        Location = new Point(screen.Right - Width - 16, screen.Top + 16);
+        // Position top-right; clamp so form never starts off the bottom of the screen
+        int left = screen.Right - Width - 16;
+        int top  = Math.Min(screen.Top + 16, screen.Bottom - Height);
+        Location = new Point(left, top);
     }
 
     private void AddLayoutBtn(Panel parent, LayoutType layout, string label, int x, int y, int w, int h)
