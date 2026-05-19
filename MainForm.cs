@@ -42,9 +42,13 @@ public class MainForm : Form
         SuspendLayout();
         BuildUI();
         BuildTray();
-        ResumeLayout(false);
+        ResumeLayout(true);
 
-        Load += (_, _) => RegisterHotKey(Handle, HK_TOGGLE, MOD_CTRL | MOD_ALT, VK_W);
+        Load += (_, _) =>
+        {
+            RegisterHotKey(Handle, HK_TOGGLE, MOD_CTRL | MOD_ALT, VK_W);
+            Hide(); // start hidden; user opens via tray icon or Ctrl+Alt+W
+        };
     }
 
     // ── UI Construction ───────────────────────────────────────────────────────
@@ -189,8 +193,8 @@ public class MainForm : Form
 
         // Fix width, allow vertical resize only
         int nonClientW = Width - ClientSize.Width;
-        MinimumSize = new Size(Width,       300);
-        MaximumSize = new Size(Width + nonClientW, 0); // 0 = no max height
+        MinimumSize = new Size(Width, 300);
+        MaximumSize = new Size(Width + nonClientW, int.MaxValue); // fixed width, free height
 
         scroll.Dock = DockStyle.Fill;
         scroll.AutoScrollMinSize = new Size(0, y); // width=0 suppresses horizontal scrollbar
@@ -222,15 +226,17 @@ public class MainForm : Form
 
     private void BuildTray()
     {
-        var icoPath2 = Path.Combine(AppContext.BaseDirectory, "icons", "app.ico");
+        var icoPath2 = Path.Combine(AppContext.BaseDirectory, "icons", "tray.ico");
+        if (!File.Exists(icoPath2)) icoPath2 = Path.Combine(AppContext.BaseDirectory, "icons", "app.ico");
         _tray = new NotifyIcon
         {
-            Text = "Web Splitter",
+            Text = "Sport Splitter",
             Icon = File.Exists(icoPath2) ? new Icon(icoPath2, 16, 16) : SystemIcons.Application,
             Visible = true
         };
         var menu = new ContextMenuStrip { BackColor = C_BG, ForeColor = C_TEXT };
         menu.Items.Add("Show  (Ctrl+Alt+W)", null, (_, _) => ShowPanel());
+        menu.Items.Add("Bring Windows to Front", null, (_, _) => BringWindowsToFront());
         menu.Items.Add("Close All Windows", null, (_, _) => CloseAllWindows());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => { CloseAllWindows(); Application.Exit(); });
@@ -275,7 +281,7 @@ public class MainForm : Form
             string url = idx < _config.Urls.Length ? _config.Urls[idx] : "";
             var win = new BrowserWindow(idx, url);
             _windows.Add(win);
-            win.Show(this);
+            win.Show();
             await win.InitializeAsync(_env);
         }
 
@@ -370,6 +376,12 @@ public class MainForm : Form
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private void BringWindowsToFront()
+    {
+        foreach (var w in _windows)
+            if (w.Visible) { w.BringToFront(); w.Activate(); }
+    }
 
     private void ShowPanel()
     {
