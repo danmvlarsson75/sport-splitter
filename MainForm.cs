@@ -68,7 +68,7 @@ public class MainForm : Form
         ShowInTaskbar   = false;
         AutoScaleMode   = AutoScaleMode.None;
 
-        const int W   = 360;
+        const int W   = 440;
         const int pad = 20;
         int y = 0;
 
@@ -404,7 +404,7 @@ public class MainForm : Form
     {
         Text = text.ToUpperInvariant(), ForeColor = Color.FromArgb(0x88, 0x99, 0xbb),
         BackColor = Color.FromArgb(0x1a, 0x1a, 0x2e),
-        Location = new Point(pad, y), Size = new Size(200, 18),
+        Location = new Point(pad, y), Size = new Size(400, 18),
         Font = new Font("Segoe UI", 7.5f, FontStyle.Bold)
     };
 
