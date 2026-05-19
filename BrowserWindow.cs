@@ -11,13 +11,26 @@ public class BrowserWindow : Form
     public int SlotIndex { get; }
     public string CurrentUrl { get; private set; }
 
+    // Hide from taskbar and Alt+Tab — managed via Sport Splitter panel
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            const int WS_EX_TOOLWINDOW = 0x00000080;
+            const int WS_EX_APPWINDOW  = 0x00040000;
+            var cp = base.CreateParams;
+            cp.ExStyle = (cp.ExStyle | WS_EX_TOOLWINDOW) & ~WS_EX_APPWINDOW;
+            return cp;
+        }
+    }
+
     public BrowserWindow(int slotIndex, string url)
     {
         SlotIndex = slotIndex;
         CurrentUrl = url;
 
         FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = true;
+        ShowInTaskbar = false;
         BackColor = Color.Black;
         Text = $"Sport Splitter - Window {slotIndex + 1}";
 
@@ -46,14 +59,22 @@ public class BrowserWindow : Form
         };
 
         if (!string.IsNullOrWhiteSpace(CurrentUrl))
-            _webView.CoreWebView2.Navigate(CurrentUrl);
+            _webView.CoreWebView2.Navigate(NormalizeUrl(CurrentUrl));
     }
 
     public void NavigateTo(string url)
     {
         CurrentUrl = url;
         if (_initialized && _webView.CoreWebView2 != null && !string.IsNullOrWhiteSpace(url))
-            _webView.CoreWebView2.Navigate(url);
+            _webView.CoreWebView2.Navigate(NormalizeUrl(url));
+    }
+
+    private static string NormalizeUrl(string url)
+    {
+        url = url.Trim();
+        if (!url.Contains("://"))
+            url = "https://" + url;
+        return url;
     }
 
     public async Task SetMutedAsync(bool muted)
