@@ -197,18 +197,17 @@ public class MainForm : Form
         Add(_status);
         y += 28;
 
-        // Size form to fit all content, capped at screen working area
-        int sbW   = SystemInformation.VerticalScrollBarWidth;
-        int formW = W + sbW;
-        var screen = Screen.PrimaryScreen!.WorkingArea;
-
-        // Set ClientSize once to let WinForms establish the non-client area (title bar + borders),
-        // then use the actual non-client height to compute the correct maximum client height.
-        ClientSize = new Size(formW, y + 8);
-        int nonClientH  = Height - ClientSize.Height;
-        int maxClientH  = screen.Height - nonClientH - 16;
-        if (ClientSize.Height > maxClientH)
-            ClientSize = new Size(formW, maxClientH);
+        // Size form to fit all content, capped at screen working area.
+        // Use SystemInformation for non-client height — the window handle does not
+        // exist yet in the constructor so Height - ClientSize.Height would be 0.
+        int sbW        = SystemInformation.VerticalScrollBarWidth;
+        int formW      = W + sbW;
+        var screen     = Screen.PrimaryScreen!.WorkingArea;
+        int nonClientH = SystemInformation.CaptionHeight
+                       + SystemInformation.FrameBorderSize.Height * 2;
+        int maxClientH = screen.Height - nonClientH - 16;
+        int formH      = Math.Min(y + 8, maxClientH);
+        ClientSize     = new Size(formW, formH);
 
         // Allow free resize in both directions
         MinimumSize = new Size(320, 300);
