@@ -1,42 +1,73 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Publishes Sport Splitter and compiles the Inno Setup installer.
+    Bumps the patch version, publishes Sport Splitter, compiles the installer,
+    commits the version bump, tags the commit, and creates a GitHub Release.
 
 .PARAMETER Version
-    Optional. Overrides the version in the .csproj and .iss (e.g. "1.2.0").
-    Defaults to the <Version> in SportSplitter.csproj.
+    Optional. Explicit version to use (e.g. "2.0.0"). Skips auto-increment.
+
+.PARAMETER BumpMinor
+    Bump the minor version instead of patch (e.g. 1.0.x -> 1.1.0).
+
+.PARAMETER BumpMajor
+    Bump the major version instead of patch (e.g. 1.x.x -> 2.0.0).
 
 .EXAMPLE
-    .\build-installer.ps1
-    .\build-installer.ps1 -Version 1.1.0
+    .\build-installer.ps1                  # auto-increment patch: 1.0.0 -> 1.0.1
+    .\build-installer.ps1 -BumpMinor       # 1.0.1 -> 1.1.0
+    .\build-installer.ps1 -BumpMajor       # 1.1.0 -> 2.0.0
+    .\build-installer.ps1 -Version 3.0.0   # explicit version
 #>
 param(
-    [string]$Version = ""
+    [string]$Version   = "",
+    [switch]$BumpMinor,
+    [switch]$BumpMajor
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$root      = $PSScriptRoot
-$csproj    = Join-Path $root "SportSplitter.csproj"
-$issScript = Join-Path $root "installer\SportSplitter.iss"
+$root       = $PSScriptRoot
+$csproj     = Join-Path $root "SportSplitter.csproj"
+$issScript  = Join-Path $root "installer\SportSplitter.iss"
 $publishDir = Join-Path $root "publish"
 $outputDir  = Join-Path $root "installer\output"
 
-# ── Resolve version ───────────────────────────────────────────────────────────
+# ── Read current version from csproj ─────────────────────────────────────────
+[xml]$proj = Get-Content $csproj
+$current = $proj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
+if (-not $current) { $current = "1.0.0" }
+
+# ── Resolve new version ───────────────────────────────────────────────────────
 if (-not $Version) {
-    [xml]$proj = Get-Content $csproj
-    $Version = $proj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
-    if (-not $Version) { $Version = "1.0.0" }
+    $parts = $current -split '\.'
+    $major = [int]$parts[0]
+    $minor = if ($parts.Count -gt 1) { [int]$parts[1] } else { 0 }
+    $patch = if ($parts.Count -gt 2) { [int]$parts[2] } else { 0 }
+
+    if ($BumpMajor)      { $major++; $minor = 0; $patch = 0 }
+    elseif ($BumpMinor)  { $minor++; $patch = 0 }
+    else                 { $patch++ }
+
+    $Version = "$major.$minor.$patch"
 }
-Write-Host "Building version $Version" -ForegroundColor Cyan
+
+Write-Host "Version: $current -> $Version" -ForegroundColor Cyan
+
+# ── Update version in csproj ──────────────────────────────────────────────────
+$csprojContent = Get-Content $csproj -Raw
+$csprojContent = $csprojContent -replace '<Version>[^<]*</Version>',         "<Version>$Version</Version>"
+$csprojContent = $csprojContent -replace '<AssemblyVersion>[^<]*</AssemblyVersion>', "<AssemblyVersion>$Version.0</AssemblyVersion>"
+$csprojContent = $csprojContent -replace '<FileVersion>[^<]*</FileVersion>',  "<FileVersion>$Version.0</FileVersion>"
+Set-Content $csproj $csprojContent -Encoding UTF8
+Write-Host "Updated csproj to $Version"
 
 # ── Patch version in .iss ─────────────────────────────────────────────────────
 $iss = Get-Content $issScript -Raw
 $iss = $iss -replace '#define AppVersion\s+"[^"]*"', "#define AppVersion   `"$Version`""
 Set-Content $issScript $iss -Encoding UTF8
-Write-Host "Patched installer version to $Version"
+Write-Host "Patched installer script to $Version"
 
 # ── dotnet publish ────────────────────────────────────────────────────────────
 Write-Host "`nPublishing..." -ForegroundColor Cyan
@@ -83,3 +114,29 @@ if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
 $installer = Get-ChildItem $outputDir -Filter "*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 Write-Host "`nInstaller ready: $($installer.FullName)" -ForegroundColor Green
+
+# ── Commit version bump, tag, and GitHub Release ──────────────────────────────
+Write-Host "`nCommitting version bump..." -ForegroundColor Cyan
+
+$tag = "v$Version"
+
+git add (Join-Path $root "SportSplitter.csproj") (Join-Path $root "installer\SportSplitter.iss")
+git commit -m "chore: bump version to $Version"
+if ($LASTEXITCODE -ne 0) { throw "git commit failed" }
+
+git tag $tag
+if ($LASTEXITCODE -ne 0) { throw "git tag failed" }
+
+git push origin master
+if ($LASTEXITCODE -ne 0) { throw "git push failed" }
+
+git push origin $tag
+if ($LASTEXITCODE -ne 0) { throw "git push tag failed" }
+
+Write-Host "Creating GitHub Release $tag..." -ForegroundColor Cyan
+gh release create $tag "$($installer.FullName)#SportSplitter-$Version-Setup.exe" `
+    --title "Sport Splitter $tag" `
+    --notes "Release $tag"
+if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+
+Write-Host "`nRelease $tag published." -ForegroundColor Green
