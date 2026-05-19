@@ -167,51 +167,58 @@ public class MainForm : Form
         AddToggleRow(scroll, "Cover taskbar (fullscreen)", false, pad, y, W, out var taskbarToggle);
         taskbarToggle.Toggled += on => _coverTaskbar = on;
         y += 32;
+        y += 8; // breathing room at bottom of scroll area
 
-        // Actions
-        Add(HRule(y, W)); y += 10;
-        var closeBtn = MakeButton("Close All Windows", pad, y, W - pad * 2, C_ACCENT);
-        closeBtn.Click += (_, _) => CloseAllWindows();
-        Add(closeBtn);
-        y += 38;
-
-        // Version label
+        // ── Fixed footer (never scrolls away) ────────────────────────────────
         var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         string verText = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "";
-        Add(new Label
-        {
-            Text = verText, ForeColor = C_MUTED, BackColor = C_BG,
-            Location = new Point(pad, y), Size = new Size(W - pad * 2, 18),
-            TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI", 7.5f)
-        });
-        y += 22;
+
+        const int footerH = 70; // HRule(1) + gap(9) + button(28) + gap(6) + version(18) + gap(8)
+        var footer = new Panel { BackColor = C_BG, Height = footerH, Dock = DockStyle.Bottom };
+
+        int fy = 0;
+        footer.Controls.Add(new Panel { Location = Point.Empty, Size = new Size(W + SystemInformation.VerticalScrollBarWidth, 1), BackColor = Color.FromArgb(0x2a, 0x2a, 0x4a) });
+        fy += 10;
+
+        var closeBtn = MakeButton("Close All Windows", pad, fy, W - pad * 2, C_ACCENT);
+        closeBtn.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
+        closeBtn.Click += (_, _) => CloseAllWindows();
+        footer.Controls.Add(closeBtn);
+        fy += 34;
 
         _status = new Label
         {
             Text = "", ForeColor = C_MUTED, BackColor = C_BG,
-            Location = new Point(pad, y), Size = new Size(W - pad * 2, 20),
+            Location = new Point(pad, fy), Size = new Size(W - pad * 2, 18),
             TextAlign = ContentAlignment.MiddleCenter,
-            Font = new Font("Segoe UI", 8f)
+            Font = new Font("Segoe UI", 8f), Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
         };
-        Add(_status);
-        y += 28;
+        footer.Controls.Add(_status);
 
-        // Size form to fit all content, capped at screen working area.
-        // Use SystemInformation for non-client height — the window handle does not
-        // exist yet in the constructor so Height - ClientSize.Height would be 0.
+        footer.Controls.Add(new Label
+        {
+            Text = verText, ForeColor = C_MUTED, BackColor = C_BG,
+            Location = new Point(pad, fy), Size = new Size(W - pad * 2, 18),
+            TextAlign = ContentAlignment.MiddleRight,
+            Font = new Font("Segoe UI", 7.5f), Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+        });
+
+        // ── Size form ─────────────────────────────────────────────────────────
         int sbW        = SystemInformation.VerticalScrollBarWidth;
         int formW      = W + sbW;
         var screen     = Screen.PrimaryScreen!.WorkingArea;
         int nonClientH = SystemInformation.CaptionHeight
                        + SystemInformation.FrameBorderSize.Height * 2;
         int maxClientH = screen.Height - nonClientH - 16;
-        int formH      = Math.Min(y + 8, maxClientH);
+        int formH      = Math.Min(y + footerH, maxClientH);
         ClientSize     = new Size(formW, formH);
 
         // Allow free resize in both directions
         MinimumSize = new Size(320, 300);
         MaximumSize = Size.Empty;
+
+        // Footer docked to bottom first so Fill scroll doesn't overlap it
+        Controls.Add(footer);
 
         scroll.Dock = DockStyle.Fill;
         scroll.AutoScrollMinSize = new Size(0, y);
