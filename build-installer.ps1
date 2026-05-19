@@ -70,7 +70,10 @@ Set-Content $issScript $iss -Encoding UTF8
 Write-Host "Patched installer script to $Version"
 
 # ── dotnet publish ────────────────────────────────────────────────────────────
-Write-Host "`nPublishing..." -ForegroundColor Cyan
+Write-Host "`nCleaning..." -ForegroundColor Cyan
+dotnet clean $csproj --configuration Release | Out-Null
+
+Write-Host "Publishing..." -ForegroundColor Cyan
 if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
 
 dotnet publish $csproj `
