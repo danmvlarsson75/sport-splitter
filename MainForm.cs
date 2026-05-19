@@ -25,6 +25,7 @@ public class MainForm : Form
     static readonly Color C_MUTED   = Color.FromArgb(0x88, 0x88, 0x88);
 
     // ── State ─────────────────────────────────────────────────────────────────
+    private float _dpiScale = 1f;
     private readonly Config _config = Config.Load();
     private readonly List<BrowserWindow> _windows = new();
     private CoreWebView2Environment? _env;
@@ -68,9 +69,16 @@ public class MainForm : Form
         ShowInTaskbar   = false;
         AutoScaleMode   = AutoScaleMode.None;
 
-        const int W   = 440;
-        const int pad = 20;
-        int y = 0;
+        // Scale all layout constants for the current DPI.
+        // DeviceDpi returns the static system DPI before the handle is created,
+        // which matches the monitor DPI on single-monitor setups and is a safe
+        // baseline for the initial layout.
+        _dpiScale = DeviceDpi / 96f;
+        int S(int v) => (int)Math.Round(v * _dpiScale);
+
+        int W   = S(440);
+        int pad = S(20);
+        int y   = 0;
 
         // Scrollable content panel — fills the form, scrolls when content exceeds form height
         var scroll = new Panel
@@ -86,28 +94,28 @@ public class MainForm : Form
         {
             Text = "Sport Splitter", Font = new Font("Segoe UI Semibold", 12f),
             ForeColor = C_TEXT, BackColor = C_BG,
-            Location = new Point(0, 0), Size = new Size(W, 42),
+            Location = new Point(0, 0), Size = new Size(W, S(42)),
             TextAlign = ContentAlignment.MiddleCenter
         });
-        y = 42;
+        y = S(42);
         Add(HRule(y, W)); y += 1;
 
         // URLs
-        Add(SectionLabel("URLs", y + 5, pad)); y += 24;
+        Add(SectionLabel("URLs", y + S(5), pad)); y += S(24);
         for (int i = 0; i < 9; i++)
         {
             int idx = i;
             Add(new Label
             {
                 Text = $"{i + 1}", ForeColor = C_MUTED, BackColor = C_BG,
-                Location = new Point(pad, y + 5), Size = new Size(16, 20),
+                Location = new Point(pad, y + S(5)), Size = new Size(S(16), S(20)),
                 TextAlign = ContentAlignment.MiddleRight
             });
             var box = new TextBox
             {
                 Text = _config.Urls[i],
-                Location = new Point(pad + 20, y),
-                Size = new Size(W - pad * 2 - 20, 24),
+                Location = new Point(pad + S(20), y),
+                Size = new Size(W - pad * 2 - S(20), S(24)),
                 BackColor = C_SURFACE, ForeColor = C_TEXT,
                 BorderStyle = BorderStyle.FixedSingle,
                 Font = new Font("Segoe UI", 9f)
@@ -115,46 +123,46 @@ public class MainForm : Form
             box.TextChanged += (_, _) => { _config.Urls[idx] = box.Text.Trim(); _config.Save(); };
             _urlBoxes[i] = box;
             Add(box);
-            y += 30;
+            y += S(30);
         }
-        y += 4;
+        y += S(4);
 
         // Layout sections
-        int btnW2 = (W - pad * 2 - 8) / 2;
+        int btnW2 = (W - pad * 2 - S(8)) / 2;
 
         void LayoutSection(string title, Action addBtns, int btnH)
         {
             Add(HRule(y, W)); y += 1;
-            Add(SectionLabel(title, y + 5, pad)); y += 24;
+            Add(SectionLabel(title, y + S(5), pad)); y += S(24);
             addBtns();
-            y += btnH + 10;
+            y += btnH + S(10);
         }
 
         LayoutSection("2 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.LeftRight, "Left / Right",   pad,             y, btnW2, 80);
-            AddLayoutBtn(scroll, LayoutType.TopBottom, "Top / Bottom",   pad + btnW2 + 8, y, btnW2, 80);
-        }, 80);
+            AddLayoutBtn(scroll, LayoutType.LeftRight, "Left / Right",   pad,                 y, btnW2, S(80));
+            AddLayoutBtn(scroll, LayoutType.TopBottom, "Top / Bottom",   pad + btnW2 + S(8),  y, btnW2, S(80));
+        }, S(80));
 
         LayoutSection("3 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.ThreeLeft, "Main Left", pad,             y, btnW2, 80);
-            AddLayoutBtn(scroll, LayoutType.ThreeTop,  "Main Top",  pad + btnW2 + 8, y, btnW2, 80);
-        }, 80);
+            AddLayoutBtn(scroll, LayoutType.ThreeLeft, "Main Left", pad,                 y, btnW2, S(80));
+            AddLayoutBtn(scroll, LayoutType.ThreeTop,  "Main Top",  pad + btnW2 + S(8),  y, btnW2, S(80));
+        }, S(80));
 
         LayoutSection("4 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.Quad,    "Quad Grid",  pad, y, W - pad * 2, 80);
-        }, 80);
+            AddLayoutBtn(scroll, LayoutType.Quad,    "Quad Grid",  pad, y, W - pad * 2, S(80));
+        }, S(80));
 
         LayoutSection("6 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.SixGrid, "2 × 3 Grid", pad, y, W - pad * 2, 100);
-        }, 100);
+            AddLayoutBtn(scroll, LayoutType.SixGrid, "2 × 3 Grid", pad, y, W - pad * 2, S(100));
+        }, S(100));
 
         LayoutSection("9 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.NineGrid, "3 × 3 Grid", pad, y, W - pad * 2, 110);
-        }, 110);
+            AddLayoutBtn(scroll, LayoutType.NineGrid, "3 × 3 Grid", pad, y, W - pad * 2, S(110));
+        }, S(110));
 
         // Options
         Add(HRule(y, W)); y += 1;
-        Add(SectionLabel("Options", y + 5, pad)); y += 24;
+        Add(SectionLabel("Options", y + S(5), pad)); y += S(24);
         AddToggleRow(scroll, "Audio follows mouse", _config.AudioFollowsMouse, pad, y, W, out var audioToggle);
         audioToggle.Toggled += on =>
         {
@@ -163,33 +171,33 @@ public class MainForm : Form
             _config.Save();
             if (!on) _audio.UnmuteAll();
         };
-        y += 32;
+        y += S(32);
         AddToggleRow(scroll, "Cover taskbar (fullscreen)", false, pad, y, W, out var taskbarToggle);
         taskbarToggle.Toggled += on => _coverTaskbar = on;
-        y += 32;
-        y += 8; // breathing room at bottom of scroll area
+        y += S(32);
+        y += S(8);
 
         // ── Fixed footer (never scrolls away) ────────────────────────────────
         var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         string verText = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "";
 
-        const int footerH = 70; // HRule(1) + gap(9) + button(28) + gap(6) + version(18) + gap(8)
+        int footerH = S(70);
         var footer = new Panel { BackColor = C_BG, Height = footerH, Dock = DockStyle.Bottom };
 
         int fy = 0;
         footer.Controls.Add(new Panel { Location = Point.Empty, Size = new Size(W + SystemInformation.VerticalScrollBarWidth, 1), BackColor = Color.FromArgb(0x2a, 0x2a, 0x4a) });
-        fy += 10;
+        fy += S(10);
 
         var closeBtn = MakeButton("Close All Windows", pad, fy, W - pad * 2, C_ACCENT);
         closeBtn.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
         closeBtn.Click += (_, _) => CloseAllWindows();
         footer.Controls.Add(closeBtn);
-        fy += 34;
+        fy += S(34);
 
         _status = new Label
         {
             Text = "", ForeColor = C_MUTED, BackColor = C_BG,
-            Location = new Point(pad, fy), Size = new Size(W - pad * 2, 18),
+            Location = new Point(pad, fy), Size = new Size(W - pad * 2, S(18)),
             TextAlign = ContentAlignment.MiddleCenter,
             Font = new Font("Segoe UI", 8f), Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
         };
@@ -198,7 +206,7 @@ public class MainForm : Form
         footer.Controls.Add(new Label
         {
             Text = verText, ForeColor = C_MUTED, BackColor = C_BG,
-            Location = new Point(pad, fy), Size = new Size(W - pad * 2, 18),
+            Location = new Point(pad, fy), Size = new Size(W - pad * 2, S(18)),
             TextAlign = ContentAlignment.MiddleRight,
             Font = new Font("Segoe UI", 7.5f), Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
         });
@@ -209,12 +217,12 @@ public class MainForm : Form
         var screen     = Screen.PrimaryScreen!.WorkingArea;
         int nonClientH = SystemInformation.CaptionHeight
                        + SystemInformation.FrameBorderSize.Height * 2;
-        int maxClientH = screen.Height - nonClientH - 16;
+        int maxClientH = screen.Height - nonClientH - S(16);
         int formH      = Math.Min(y + footerH, maxClientH);
         ClientSize     = new Size(formW, formH);
 
         // Allow free resize in both directions
-        MinimumSize = new Size(320, 300);
+        MinimumSize = new Size(S(320), S(300));
         MaximumSize = Size.Empty;
 
         // Footer docked to bottom first so Fill scroll doesn't overlap it
@@ -225,9 +233,10 @@ public class MainForm : Form
         Controls.Add(scroll);
 
         // Position top-right; clamp so form never starts off the bottom of the screen
-        int left = screen.Right - Width - 16;
-        int top  = Math.Min(screen.Top + 16, screen.Bottom - Height);
-        Location = new Point(left, top);
+        int margin = S(16);
+        int left   = screen.Right - Width - margin;
+        int top    = Math.Min(screen.Top + margin, screen.Bottom - Height);
+        Location   = new Point(left, top);
     }
 
     private void AddLayoutBtn(Panel parent, LayoutType layout, string label, int x, int y, int w, int h)
@@ -239,13 +248,14 @@ public class MainForm : Form
 
     private void AddToggleRow(Panel parent, string text, bool on, int pad, int y, int W, out ToggleButton toggle)
     {
+        int s(int v) => (int)Math.Round(v * _dpiScale);
         parent.Controls.Add(new Label
         {
             Text = text, ForeColor = C_TEXT, BackColor = C_BG,
-            Location = new Point(pad, y), Size = new Size(W - pad * 2 - 56, 26),
+            Location = new Point(pad, y), Size = new Size(W - pad * 2 - s(56), s(26)),
             TextAlign = ContentAlignment.MiddleLeft
         });
-        toggle = new ToggleButton { Location = new Point(W - pad - 50, y + 2), Size = new Size(50, 22) };
+        toggle = new ToggleButton { Location = new Point(W - pad - s(50), y + s(2)), Size = new Size(s(50), s(22)) };
         toggle.SetOn(on);
         parent.Controls.Add(toggle);
     }
@@ -426,11 +436,11 @@ public class MainForm : Form
         t.Start();
     }
 
-    private static Label SectionLabel(string text, int y, int pad) => new()
+    private Label SectionLabel(string text, int y, int pad) => new()
     {
         Text = text.ToUpperInvariant(), ForeColor = Color.FromArgb(0x88, 0x99, 0xbb),
         BackColor = Color.FromArgb(0x1a, 0x1a, 0x2e),
-        Location = new Point(pad, y), Size = new Size(400, 18),
+        Location = new Point(pad, y), Size = new Size((int)Math.Round(400 * _dpiScale), (int)Math.Round(18 * _dpiScale)),
         Font = new Font("Segoe UI", 7.5f, FontStyle.Bold)
     };
 
@@ -442,7 +452,7 @@ public class MainForm : Form
 
     private Button MakeButton(string text, int x, int y, int w, Color fg) => new()
     {
-        Text = text, Location = new Point(x, y), Size = new Size(w, 28),
+        Text = text, Location = new Point(x, y), Size = new Size(w, (int)Math.Round(28 * _dpiScale)),
         FlatStyle = FlatStyle.Flat, BackColor = C_SURFACE, ForeColor = fg,
         Font = new Font("Segoe UI", 9f), Cursor = Cursors.Hand,
         FlatAppearance = { BorderColor = Color.FromArgb(0x2a, 0x2a, 0x4a), BorderSize = 1 }
@@ -509,8 +519,9 @@ public class MainForm : Form
             g.DrawRectangle(borderPen, 0, 0, Width - 1, Height - 1);
 
             // Draw layout preview using 16:9 aspect ratio, centered in the top portion
-            int labelH  = 22;
-            int margin  = 8;
+            float dpi   = DeviceDpi / 96f;
+            int labelH  = (int)Math.Round(22 * dpi);
+            int margin  = (int)Math.Round(8 * dpi);
             int availW  = Width  - margin * 2;
             int availH  = Height - labelH - margin * 2;
             // Fit a 16:9 rectangle inside available area
