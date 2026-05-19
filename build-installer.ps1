@@ -55,21 +55,10 @@ if (-not $Version) {
 
 Write-Host "Version: $current -> $Version" -ForegroundColor Cyan
 
-# ── Update version in csproj ──────────────────────────────────────────────────
-$csprojContent = Get-Content $csproj -Raw
-$csprojContent = $csprojContent -replace '<Version>[^<]*</Version>',         "<Version>$Version</Version>"
-$csprojContent = $csprojContent -replace '<AssemblyVersion>[^<]*</AssemblyVersion>', "<AssemblyVersion>$Version.0</AssemblyVersion>"
-$csprojContent = $csprojContent -replace '<FileVersion>[^<]*</FileVersion>',  "<FileVersion>$Version.0</FileVersion>"
-Set-Content $csproj $csprojContent -Encoding UTF8
-Write-Host "Updated csproj to $Version"
+# ── dotnet clean + publish ────────────────────────────────────────────────────
+# Kill any running SportSplitter so publish/ files aren't locked
+Get-Process -Name "SportSplitter" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-# ── Patch version in .iss ─────────────────────────────────────────────────────
-$iss = Get-Content $issScript -Raw
-$iss = $iss -replace '#define AppVersion\s+"[^"]*"', "#define AppVersion   `"$Version`""
-Set-Content $issScript $iss -Encoding UTF8
-Write-Host "Patched installer script to $Version"
-
-# ── dotnet publish ────────────────────────────────────────────────────────────
 Write-Host "`nCleaning..." -ForegroundColor Cyan
 dotnet clean $csproj --configuration Release | Out-Null
 
@@ -108,6 +97,11 @@ if (-not $iscc) {
     exit 0
 }
 
+# ── Patch .iss version ────────────────────────────────────────────────────────
+$iss = Get-Content $issScript -Raw
+$iss = $iss -replace '#define AppVersion\s+"[^"]*"', "#define AppVersion   `"$Version`""
+Set-Content $issScript $iss -Encoding UTF8
+
 # ── Compile installer ─────────────────────────────────────────────────────────
 Write-Host "`nCompiling installer..." -ForegroundColor Cyan
 if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir | Out-Null }
@@ -117,6 +111,13 @@ if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed" }
 
 $installer = Get-ChildItem $outputDir -Filter "*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 Write-Host "`nInstaller ready: $($installer.FullName)" -ForegroundColor Green
+
+# ── Write version to csproj (only after successful build) ────────────────────
+$csprojContent = Get-Content $csproj -Raw
+$csprojContent = $csprojContent -replace '<Version>[^<]*</Version>',                   "<Version>$Version</Version>"
+$csprojContent = $csprojContent -replace '<AssemblyVersion>[^<]*</AssemblyVersion>',   "<AssemblyVersion>$Version.0</AssemblyVersion>"
+$csprojContent = $csprojContent -replace '<FileVersion>[^<]*</FileVersion>',            "<FileVersion>$Version.0</FileVersion>"
+Set-Content $csproj $csprojContent -Encoding UTF8
 
 # ── Commit version bump, tag, and GitHub Release ──────────────────────────────
 Write-Host "`nCommitting version bump..." -ForegroundColor Cyan
