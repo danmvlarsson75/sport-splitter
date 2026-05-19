@@ -6,9 +6,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SportSplitter</AssemblyName>
-    <Version>1.0.3</Version>
-    <AssemblyVersion>1.0.3.0</AssemblyVersion>
-    <FileVersion>1.0.3.0</FileVersion>
+    <Version>1.0.4</Version>
+    <AssemblyVersion>1.0.4.0</AssemblyVersion>
+    <FileVersion>1.0.4.0</FileVersion>
     <Product>Sport Splitter</Product>
     <Company>Dan Larsson</Company>
     <Description>Tile multiple sports streams across your screen using borderless browser windows.</Description>
@@ -29,6 +29,7 @@
     </Content>
   </ItemGroup>
 </Project>
+
 
 
 

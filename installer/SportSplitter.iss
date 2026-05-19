@@ -1,5 +1,5 @@
 ﻿#define AppName      "Sport Splitter"
-#define AppVersion   "1.0.3"
+#define AppVersion   "1.0.4"
 #define AppPublisher "Dan Larsson"
 #define AppExeName   "SportSplitter.exe"
 #define PublishDir   "..\publish"
@@ -89,6 +89,7 @@ begin
       Result := False;
   end;
 end;
+
 
 
 
