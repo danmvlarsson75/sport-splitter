@@ -12,3 +12,7 @@ BrowserData/
 # Icon/config generator scripts
 gen_icons.py
 make_ico.py
+
+# Installer build artifacts
+publish/
+installer/output/

@@ -6,6 +6,13 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SportSplitter</AssemblyName>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>Sport Splitter</Product>
+    <Company>Dan Larsson</Company>
+    <Description>Tile multiple sports streams across your screen using borderless browser windows.</Description>
+    <Copyright>Copyright © Dan Larsson 2025</Copyright>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>icons\app.ico</ApplicationIcon>
