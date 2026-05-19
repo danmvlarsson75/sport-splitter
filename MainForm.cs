@@ -175,6 +175,18 @@ public class MainForm : Form
         Add(closeBtn);
         y += 38;
 
+        // Version label
+        var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        string verText = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "";
+        Add(new Label
+        {
+            Text = verText, ForeColor = C_MUTED, BackColor = C_BG,
+            Location = new Point(pad, y), Size = new Size(W - pad * 2, 18),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Segoe UI", 7.5f)
+        });
+        y += 22;
+
         _status = new Label
         {
             Text = "", ForeColor = C_MUTED, BackColor = C_BG,
@@ -185,22 +197,21 @@ public class MainForm : Form
         Add(_status);
         y += 28;
 
-        // Width: content (W) + vertical scrollbar so horizontal scroll never appears
-        int sbW   = SystemInformation.VerticalScrollBarWidth;
-        int formW = W + sbW;
-        int formH = Math.Min(y, 680);
+        // Size form to fit all content, capped at screen working area
+        int sbW    = SystemInformation.VerticalScrollBarWidth;
+        int formW  = W + sbW;
+        var screen = Screen.PrimaryScreen!.WorkingArea;
+        int formH  = Math.Min(y + 8, screen.Height - 32);
         ClientSize = new Size(formW, formH);
 
-        // Fix width, allow vertical resize only
-        int nonClientW = Width - ClientSize.Width;
-        MinimumSize = new Size(Width, 300);
-        MaximumSize = new Size(Width + nonClientW, int.MaxValue); // fixed width, free height
+        // Allow free resize in both directions
+        MinimumSize = new Size(320, 300);
+        MaximumSize = Size.Empty; // no maximum
 
         scroll.Dock = DockStyle.Fill;
-        scroll.AutoScrollMinSize = new Size(0, y); // width=0 suppresses horizontal scrollbar
+        scroll.AutoScrollMinSize = new Size(0, y);
         Controls.Add(scroll);
 
-        var screen = Screen.PrimaryScreen!.WorkingArea;
         Location = new Point(screen.Right - Width - 16, screen.Top + 16);
     }
 
