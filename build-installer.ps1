@@ -27,7 +27,7 @@ $outputDir  = Join-Path $root "installer\output"
 # ── Resolve version ───────────────────────────────────────────────────────────
 if (-not $Version) {
     [xml]$proj = Get-Content $csproj
-    $Version = $proj.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+    $Version = $proj.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ } | Select-Object -First 1
     if (-not $Version) { $Version = "1.0.0" }
 }
 Write-Host "Building version $Version" -ForegroundColor Cyan
@@ -57,10 +57,12 @@ Write-Host "Published to $publishDir" -ForegroundColor Green
 
 # ── Find Inno Setup compiler ──────────────────────────────────────────────────
 $iscc = $null
+$isccCmd = Get-Command iscc -ErrorAction SilentlyContinue
 $candidates = @(
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
     "C:\Program Files\Inno Setup 6\ISCC.exe",
-    (Get-Command iscc -ErrorAction SilentlyContinue)?.Source
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+    $(if ($isccCmd) { $isccCmd.Source } else { $null })
 )
 foreach ($c in $candidates) {
     if ($c -and (Test-Path $c)) { $iscc = $c; break }

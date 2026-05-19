@@ -1,4 +1,4 @@
-#define AppName      "Sport Splitter"
+﻿#define AppName      "Sport Splitter"
 #define AppVersion   "1.0.0"
 #define AppPublisher "Dan Larsson"
 #define AppExeName   "SportSplitter.exe"
@@ -42,15 +42,15 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}";        DestPath: "{app}\{#AppExeName}"
-Name: "{group}\Uninstall {#AppName}"; DestPath: "{uninstallexe}"
-Name: "{commondesktop}\{#AppName}"; DestPath: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}"
+Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+Name: "{commondesktop}\{#AppName}";   Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Registry]
-; Register for Windows startup (optional — user can toggle in the app if added later)
+; Register for Windows startup (optional â€” user can toggle in the app if added later)
 ; Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExeName}"""; Flags: uninsdeletevalue
 
 [UninstallDelete]
@@ -89,3 +89,6 @@ begin
       Result := False;
   end;
 end;
+
+
+
