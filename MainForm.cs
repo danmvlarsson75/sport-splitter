@@ -10,6 +10,7 @@ public class MainForm : Form
     // ── Win32 for global hotkey ───────────────────────────────────────────────
     [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
     [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    [DllImport("user32.dll")] static extern uint GetDpiForSystem();
     const int HK_TOGGLE = 1;
     const uint MOD_CTRL = 0x0002, MOD_ALT = 0x0001;
     const uint VK_W = 0x57;
@@ -69,11 +70,9 @@ public class MainForm : Form
         ShowInTaskbar   = false;
         AutoScaleMode   = AutoScaleMode.None;
 
-        // Scale all layout constants for the current DPI.
-        // DeviceDpi returns the static system DPI before the handle is created,
-        // which matches the monitor DPI on single-monitor setups and is a safe
-        // baseline for the initial layout.
-        _dpiScale = DeviceDpi / 96f;
+        // DeviceDpi can still be 96 before the form handle exists, so use the
+        // process-aware system DPI for the initial layout.
+        _dpiScale = GetInitialDpiScale();
         int S(int v) => (int)Math.Round(v * _dpiScale);
 
         int W   = S(440);
@@ -457,6 +456,23 @@ public class MainForm : Form
         Font = new Font("Segoe UI", 9f), Cursor = Cursors.Hand,
         FlatAppearance = { BorderColor = Color.FromArgb(0x2a, 0x2a, 0x4a), BorderSize = 1 }
     };
+
+    private static float GetInitialDpiScale()
+    {
+        try
+        {
+            uint dpi = GetDpiForSystem();
+            if (dpi > 0)
+                return dpi / 96f;
+        }
+        catch
+        {
+            // Fall back below if the API is unavailable for any reason.
+        }
+
+        using var screenGraphics = Graphics.FromHwnd(IntPtr.Zero);
+        return screenGraphics.DpiX / 96f;
+    }
 
     protected override void WndProc(ref Message m)
     {
