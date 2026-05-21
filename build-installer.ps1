@@ -181,8 +181,15 @@ else {
 git push origin $tag
 if ($LASTEXITCODE -ne 0) { throw "git push tag failed" }
 
-gh release view $tag *> $null
-$releaseExists = ($LASTEXITCODE -eq 0)
+$previousErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    gh release view $tag *> $null
+    $releaseExists = ($LASTEXITCODE -eq 0)
+}
+finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}
 
 if ($releaseExists) {
     Write-Host "Updating GitHub Release $tag..." -ForegroundColor Cyan
