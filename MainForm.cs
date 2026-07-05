@@ -19,11 +19,23 @@ public class MainForm : Form
     // ── Theme ─────────────────────────────────────────────────────────────────
     static readonly Color C_BG      = Color.FromArgb(0x1a, 0x1a, 0x2e);
     static readonly Color C_SURFACE = Color.FromArgb(0x16, 0x21, 0x3e);
-    static readonly Color C_HOVER   = Color.FromArgb(0x0f, 0x34, 0x60);
     static readonly Color C_ACCENT  = Color.FromArgb(0xe9, 0x45, 0x60);
-    static readonly Color C_PANE    = Color.FromArgb(0x2a, 0x4a, 0x7f);
     static readonly Color C_TEXT    = Color.FromArgb(0xea, 0xea, 0xea);
     static readonly Color C_MUTED   = Color.FromArgb(0x88, 0x88, 0x88);
+    static readonly Color C_BORDER  = Color.FromArgb(0x2a, 0x2a, 0x4a);
+    static readonly Color C_LABEL   = Color.FromArgb(0x88, 0x99, 0xbb);
+
+    private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle r, int radius)
+    {
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        int d = Math.Max(1, radius) * 2;
+        path.AddArc(r.X, r.Y, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
 
     // ── State ─────────────────────────────────────────────────────────────────
     private float _dpiScale = 1f;
@@ -94,37 +106,63 @@ public class MainForm : Form
         };
         void Add(Control c) => scroll.Controls.Add(c);
 
-        // Header
-        Add(new Label
+        // Header — two-tone title, subtitle, gradient accent rule
+        int headerH = S(62);
+        var header = new Panel { Location = Point.Empty, Size = new Size(W, headerH), BackColor = C_BG };
+        header.Paint += (_, e) =>
         {
-            Text = "Sport Splitter", Font = new Font("Segoe UI Semibold", 12f),
-            ForeColor = C_TEXT, BackColor = C_BG,
-            Location = new Point(0, 0), Size = new Size(W, S(42)),
-            TextAlign = ContentAlignment.MiddleCenter
-        });
-        y = S(42);
-        Add(HRule(y, W)); y += 1;
+            var g = e.Graphics;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            using var titleFont = new Font("Segoe UI Semibold", 13f);
+            using var subFont   = new Font("Segoe UI", 8f);
+            const string t1 = "Sport ", t2 = "Splitter";
+            var s1 = g.MeasureString(t1, titleFont);
+            var s2 = g.MeasureString(t2, titleFont);
+            float tx = (W - s1.Width - s2.Width) / 2f;
+            float ty = S(7);
+            using (var accentBrush = new SolidBrush(C_ACCENT))
+            using (var textBrush   = new SolidBrush(C_TEXT))
+            {
+                g.DrawString(t1, titleFont, accentBrush, tx, ty);
+                g.DrawString(t2, titleFont, textBrush, tx + s1.Width, ty);
+            }
+            using (var mutedBrush = new SolidBrush(C_MUTED))
+            using (var sf = new StringFormat { Alignment = StringAlignment.Center })
+                g.DrawString("Tile streams across your screen", subFont, mutedBrush,
+                    new RectangleF(0, ty + s1.Height + S(1), W, S(16)), sf);
+            var ruleRect = new Rectangle(0, headerH - 2, W, 2);
+            using var grad = new System.Drawing.Drawing2D.LinearGradientBrush(
+                ruleRect, C_BG, C_BG, 0f)
+            {
+                InterpolationColors = new System.Drawing.Drawing2D.ColorBlend
+                {
+                    Colors    = new[] { C_BG, C_ACCENT, C_BG },
+                    Positions = new[] { 0f, 0.5f, 1f }
+                }
+            };
+            g.FillRectangle(grad, ruleRect);
+        };
+        Add(header);
+        y = headerH;
 
         // URLs
         Add(SectionLabel("URLs", y + S(5), pad)); y += S(24);
         for (int i = 0; i < 9; i++)
         {
             int idx = i;
-            Add(new Label
+            Add(new NumberBadge(i + 1)
             {
-                Text = $"{i + 1}", ForeColor = C_MUTED, BackColor = C_BG,
-                Location = new Point(pad, y + S(5)), Size = new Size(S(16), S(20)),
-                TextAlign = ContentAlignment.MiddleRight
+                Location = new Point(pad, y + S(4)), Size = new Size(S(18), S(18)),
+                BackColor = C_BG
             });
-            var box = new TextBox
+            var wrap = new UrlInputPanel
             {
-                Text = _config.Urls[i],
-                Location = new Point(pad + S(20), y),
-                Size = new Size(W - pad * 2 - S(20), S(24)),
-                BackColor = C_SURFACE, ForeColor = C_TEXT,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Segoe UI", 9f)
+                Location = new Point(pad + S(24), y),
+                Size = new Size(W - pad * 2 - S(24), S(26)),
+                BackColor = C_BG
             };
+            var box = wrap.Box;
+            box.Text = _config.Urls[i];
             box.TextChanged += (_, _) => { _config.Urls[idx] = box.Text.Trim(); _config.Save(); };
             box.Leave += (_, _) => NavigateSlot(idx);
             box.KeyDown += (_, e) =>
@@ -136,8 +174,8 @@ public class MainForm : Form
                 }
             };
             _urlBoxes[i] = box;
-            Add(box);
-            y += S(30);
+            Add(wrap);
+            y += S(32);
         }
         y += S(4);
 
@@ -195,18 +233,30 @@ public class MainForm : Form
         var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         string verText = ver != null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "";
 
-        int footerH = S(70);
-        var footer = new Panel { BackColor = C_BG, Height = footerH, Dock = DockStyle.Bottom };
+        int footerH = S(74);
+        // Give the footer its final width up front: children anchored
+        // Left|Right take their resize baseline from the parent's width at
+        // add time, and the dock only stretches the panel later.
+        var footer = new Panel
+        {
+            BackColor = C_BG,
+            Size = new Size(W + SystemInformation.VerticalScrollBarWidth, footerH),
+            Dock = DockStyle.Bottom
+        };
 
         int fy = 0;
         footer.Controls.Add(new Panel { Location = Point.Empty, Size = new Size(W + SystemInformation.VerticalScrollBarWidth, 1), BackColor = Color.FromArgb(0x2a, 0x2a, 0x4a) });
         fy += S(10);
 
-        var closeBtn = MakeButton("Close All Windows", pad, fy, W - pad * 2, C_ACCENT);
-        closeBtn.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
+        var closeBtn = new PillButton("Close All Windows")
+        {
+            Location = new Point(pad, fy), Size = new Size(W - pad * 2, S(30)),
+            BackColor = C_BG,
+            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+        };
         closeBtn.Click += (_, _) => CloseAllWindows();
         footer.Controls.Add(closeBtn);
-        fy += S(34);
+        fy += S(38);
 
         _status = new Label
         {
@@ -471,26 +521,34 @@ public class MainForm : Form
         _statusTimer.Start();
     }
 
-    private Label SectionLabel(string text, int y, int pad) => new()
+    private Control SectionLabel(string text, int y, int pad)
     {
-        Text = text.ToUpperInvariant(), ForeColor = Color.FromArgb(0x88, 0x99, 0xbb),
-        BackColor = Color.FromArgb(0x1a, 0x1a, 0x2e),
-        Location = new Point(pad, y), Size = new Size((int)Math.Round(400 * _dpiScale), (int)Math.Round(18 * _dpiScale)),
-        Font = new Font("Segoe UI", 7.5f, FontStyle.Bold)
-    };
+        int s(int v) => (int)Math.Round(v * _dpiScale);
+        var p = new Panel
+        {
+            Location = new Point(pad, y),
+            Size = new Size(s(400), s(18)),
+            BackColor = C_BG
+        };
+        p.Paint += (_, e) =>
+        {
+            var g = e.Graphics;
+            using (var bar = new SolidBrush(C_ACCENT))
+                g.FillRectangle(bar, 0, s(4), s(3), p.Height - s(8));
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            using var font  = new Font("Segoe UI", 7.5f, FontStyle.Bold);
+            using var brush = new SolidBrush(C_LABEL);
+            using var sf    = new StringFormat { LineAlignment = StringAlignment.Center };
+            g.DrawString(text.ToUpperInvariant(), font, brush,
+                new RectangleF(s(9), 0, p.Width - s(9), p.Height), sf);
+        };
+        return p;
+    }
 
     private static Panel HRule(int y, int W) => new()
     {
         Location = new Point(0, y), Size = new Size(W, 1),
-        BackColor = Color.FromArgb(0x2a, 0x2a, 0x4a)
-    };
-
-    private Button MakeButton(string text, int x, int y, int w, Color fg) => new()
-    {
-        Text = text, Location = new Point(x, y), Size = new Size(w, (int)Math.Round(28 * _dpiScale)),
-        FlatStyle = FlatStyle.Flat, BackColor = C_SURFACE, ForeColor = fg,
-        Font = new Font("Segoe UI", 9f), Cursor = Cursors.Hand,
-        FlatAppearance = { BorderColor = Color.FromArgb(0x2a, 0x2a, 0x4a), BorderSize = 1 }
+        BackColor = C_BORDER
     };
 
     private static float GetInitialDpiScale()
@@ -540,11 +598,12 @@ public class MainForm : Form
 
     private sealed class LayoutButton : Control
     {
-        static readonly Color C_BG     = Color.FromArgb(0x16, 0x21, 0x3e);
-        static readonly Color C_HOVER  = Color.FromArgb(0x0f, 0x34, 0x60);
-        static readonly Color C_PANE   = Color.FromArgb(0x2a, 0x4a, 0x7f);
-        static readonly Color C_TEXT   = Color.FromArgb(0xea, 0xea, 0xea);
-        static readonly Color C_BORDER = Color.FromArgb(0x2a, 0x2a, 0x5a);
+        static readonly Color C_BG         = Color.FromArgb(0x16, 0x21, 0x3e);
+        static readonly Color C_HOVER      = Color.FromArgb(0x0f, 0x34, 0x60);
+        static readonly Color C_PANE       = Color.FromArgb(0x2a, 0x4a, 0x7f);
+        static readonly Color C_PANE_HOVER = Color.FromArgb(0xb8, 0x37, 0x4d);
+        static readonly Color C_TEXT       = Color.FromArgb(0xea, 0xea, 0xea);
+        static readonly Color C_BORDER     = Color.FromArgb(0x2a, 0x2a, 0x5a);
 
         private bool _hover;
         public event Action? Clicked;
@@ -565,13 +624,20 @@ public class MainForm : Form
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            g.Clear(_hover ? C_HOVER : C_BG);
+            float dpi = DeviceDpi / 96f;
 
-            using var borderPen = new Pen(C_BORDER);
-            g.DrawRectangle(borderPen, 0, 0, Width - 1, Height - 1);
+            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using (var path = RoundedRect(rect, (int)Math.Round(8 * dpi)))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using (var fill = new SolidBrush(_hover ? C_HOVER : C_BG))
+                    g.FillPath(fill, path);
+                using (var borderPen = new Pen(_hover ? C_ACCENT : C_BORDER))
+                    g.DrawPath(borderPen, path);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
+            }
 
             // Draw layout preview using 16:9 aspect ratio, centered in the top portion
-            float dpi   = DeviceDpi / 96f;
             int labelH  = (int)Math.Round(22 * dpi);
             int margin  = (int)Math.Round(8 * dpi);
             int availW  = Width  - margin * 2;
@@ -584,8 +650,8 @@ public class MainForm : Form
             int py = margin + (availH - ph) / 2;
             var previewRect = new Rectangle(px, py, pw, ph);
 
-            using var paneBrush = new SolidBrush(C_PANE);
-            using var panePen   = new Pen(Color.FromArgb(0x1a, 0x1a, 0x2e), 2);
+            using var paneBrush = new SolidBrush(_hover ? C_PANE_HOVER : C_PANE);
+            using var panePen   = new Pen(_hover ? C_HOVER : C_BG, 2);
             DrawLayoutPreview(g, paneBrush, panePen, previewRect, _layout);
 
             // Label
@@ -651,8 +717,9 @@ public class MainForm : Form
 
     private sealed class ToggleButton : Control
     {
-        static readonly Color C_ON  = Color.FromArgb(0xe9, 0x45, 0x60);
-        static readonly Color C_OFF = Color.FromArgb(0x44, 0x44, 0x66);
+        static readonly Color C_ON         = Color.FromArgb(0xe9, 0x45, 0x60);
+        static readonly Color C_OFF        = Color.FromArgb(0x3a, 0x3a, 0x58);
+        static readonly Color C_OFF_BORDER = Color.FromArgb(0x55, 0x55, 0x77);
 
         private bool _on;
         public event Action<bool>? Toggled;
@@ -673,13 +740,110 @@ public class MainForm : Form
         {
             var g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using var path = RoundedRect(rect, (Height - 1) / 2);
             using var bg = new SolidBrush(_on ? C_ON : C_OFF);
-            g.FillEllipse(bg, 0, 0, Height, Height);
-            g.FillEllipse(bg, Width - Height, 0, Height, Height);
-            g.FillRectangle(bg, Height / 2, 0, Width - Height, Height);
+            g.FillPath(bg, path);
+            using var border = new Pen(_on ? C_ON : C_OFF_BORDER);
+            g.DrawPath(border, path);
             int knobX = _on ? Width - Height : 0;
             using var knob = new SolidBrush(Color.White);
             g.FillEllipse(knob, knobX + 2, 2, Height - 4, Height - 4);
+        }
+    }
+
+    private sealed class NumberBadge : Control
+    {
+        private readonly string _num;
+
+        public NumberBadge(int n) { _num = n.ToString(); DoubleBuffered = true; }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using (var fill = new SolidBrush(C_SURFACE))
+                g.FillEllipse(fill, 0, 0, Width - 1, Height - 1);
+            using (var border = new Pen(C_BORDER))
+                g.DrawEllipse(border, 0, 0, Width - 1, Height - 1);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            using var font  = new Font("Segoe UI", 7.5f);
+            using var brush = new SolidBrush(C_LABEL);
+            using var sf    = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center
+            };
+            g.DrawString(_num, font, brush, new RectangleF(0, 0, Width, Height), sf);
+        }
+    }
+
+    private sealed class UrlInputPanel : Panel
+    {
+        public TextBox Box { get; } = new()
+        {
+            BorderStyle = BorderStyle.None,
+            BackColor = C_SURFACE, ForeColor = C_TEXT,
+            Font = new Font("Segoe UI", 9f)
+        };
+
+        private bool _focus;
+
+        public UrlInputPanel()
+        {
+            DoubleBuffered = true;
+            Controls.Add(Box);
+            Box.Enter += (_, _) => { _focus = true; Invalidate(); };
+            Box.Leave += (_, _) => { _focus = false; Invalidate(); };
+            Resize += (_, _) =>
+            {
+                int padX = (int)Math.Round(9 * DeviceDpi / 96f);
+                Box.SetBounds(padX, (Height - Box.PreferredHeight) / 2,
+                    Width - padX * 2, Box.PreferredHeight);
+            };
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using var path = RoundedRect(rect, (int)Math.Round(5 * DeviceDpi / 96f));
+            using var fill = new SolidBrush(C_SURFACE);
+            g.FillPath(fill, path);
+            using var pen = new Pen(_focus ? C_ACCENT : C_BORDER);
+            g.DrawPath(pen, path);
+        }
+    }
+
+    private sealed class PillButton : Control
+    {
+        private bool _hover;
+
+        public PillButton(string text) { Text = text; Cursor = Cursors.Hand; DoubleBuffered = true; }
+
+        protected override void OnMouseEnter(EventArgs e) { _hover = true;  Invalidate(); base.OnMouseEnter(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
+            using var path = RoundedRect(rect, (Height - 1) / 2);
+            using var fill = new SolidBrush(_hover ? C_ACCENT : C_SURFACE);
+            g.FillPath(fill, path);
+            using var pen = new Pen(C_ACCENT);
+            g.DrawPath(pen, path);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            using var font  = new Font("Segoe UI Semibold", 9f);
+            using var brush = new SolidBrush(_hover ? Color.White : C_ACCENT);
+            using var sf    = new StringFormat
+            {
+                Alignment = StringAlignment.Center,
+                LineAlignment = StringAlignment.Center
+            };
+            g.DrawString(Text, font, brush, new RectangleF(0, 0, Width, Height), sf);
         }
     }
 }
