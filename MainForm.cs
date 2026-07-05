@@ -45,6 +45,8 @@ public class MainForm : Form
     private readonly AudioManager _audio;
     private readonly TextBox[] _urlBoxes = new TextBox[9];
     private NotifyIcon _tray = null!;
+    private ToolStripMenuItem _updateItem = null!;
+    private readonly UpdateService _updates = new();
     private Label _status = null!;
     private bool _coverTaskbar = false;
     private bool _layoutBusy = false;
@@ -62,6 +64,19 @@ public class MainForm : Form
         BuildTray();
         ResumeLayout(true);
 
+        _updates.UpdateReady += OnUpdateReady;
+        _ = _updates.CheckAndDownloadAsync();
+    }
+
+    private void OnUpdateReady(string version)
+    {
+        if (InvokeRequired) { BeginInvoke(() => OnUpdateReady(version)); return; }
+        _updateItem.Text = $"Restart to Update (v{version})";
+        _updateItem.Visible = true;
+        _tray.ShowBalloonTip(5000, "Sport Splitter",
+            $"Version {version} has been downloaded. It will install when the app " +
+            "restarts — or right-click the tray icon and choose Restart to Update.",
+            ToolTipIcon.Info);
     }
 
     // Start hidden: swallow the initial Show from Application.Run (Hide() in
@@ -355,6 +370,12 @@ public class MainForm : Form
         menu.Items.Add("Bring Windows to Front", null, (_, _) => BringWindowsToFront());
         menu.Items.Add("Close All Windows", null, (_, _) => CloseAllWindows());
         menu.Items.Add(new ToolStripSeparator());
+        _updateItem = new ToolStripMenuItem("Restart to Update", null,
+            (_, _) => { CloseAllWindows(); _updates.ApplyAndRestart(); })
+        {
+            Visible = false
+        };
+        menu.Items.Add(_updateItem);
         menu.Items.Add("Exit", null, (_, _) => { CloseAllWindows(); Application.Exit(); });
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => ShowPanel();
@@ -608,6 +629,7 @@ public class MainForm : Form
         UnregisterHotKey(Handle, HK_TOGGLE);
         _audio.Dispose();
         _tray.Dispose();
+        _updates.ApplyOnExit(); // install any downloaded update after we exit
         base.OnFormClosing(e);
     }
 

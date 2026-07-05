@@ -16,3 +16,6 @@ make_ico.py
 # Installer build artifacts
 publish/
 installer/output/
+
+# Velopack build output
+Releases/

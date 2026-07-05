@@ -1,3 +1,5 @@
+using Velopack;
+
 namespace SportSplitter;
 
 static class Program
@@ -5,6 +7,10 @@ static class Program
     [STAThread]
     static void Main()
     {
+        // Must run before anything else: handles Velopack install/update hooks
+        // (the exe is re-invoked with special arguments during those phases).
+        VelopackApp.Build().Run();
+
         using var mutex = new System.Threading.Mutex(true, "SportSplitter_SingleInstance", out bool isNew);
         if (!isNew)
         {
