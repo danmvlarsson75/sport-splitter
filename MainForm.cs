@@ -48,6 +48,7 @@ public class MainForm : Form
     private Label _status = null!;
     private bool _coverTaskbar = false;
     private bool _layoutBusy = false;
+    private bool _allowShow = false;
     private readonly System.Windows.Forms.Timer _statusTimer = new() { Interval = 3000 };
 
     public MainForm()
@@ -61,14 +62,29 @@ public class MainForm : Form
         BuildTray();
         ResumeLayout(true);
 
-        Load += (_, _) =>
+    }
+
+    // Start hidden: swallow the initial Show from Application.Run (Hide() in
+    // the Load event doesn't stick — the show sequence re-asserts visibility
+    // after Load returns). The handle is still created so the global hotkey
+    // and WndProc work while hidden.
+    protected override void SetVisibleCore(bool value)
+    {
+        if (!_allowShow)
         {
-            if (!RegisterHotKey(Handle, HK_TOGGLE, MOD_CTRL | MOD_ALT, VK_W))
-                _tray.ShowBalloonTip(3000, "Sport Splitter",
-                    "Global hotkey Ctrl+Alt+W is unavailable (in use by another app). " +
-                    "Use the tray icon to open the panel.", ToolTipIcon.Warning);
-            Hide(); // start hidden; user opens via tray icon or Ctrl+Alt+W
-        };
+            if (!IsHandleCreated) CreateHandle();
+            value = false;
+        }
+        base.SetVisibleCore(value);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        if (!RegisterHotKey(Handle, HK_TOGGLE, MOD_CTRL | MOD_ALT, VK_W))
+            _tray?.ShowBalloonTip(3000, "Sport Splitter",
+                "Global hotkey Ctrl+Alt+W is unavailable (in use by another app). " +
+                "Use the tray icon to open the panel.", ToolTipIcon.Warning);
     }
 
     // ── UI Construction ───────────────────────────────────────────────────────
@@ -498,6 +514,7 @@ public class MainForm : Form
 
     private void ShowPanel()
     {
+        _allowShow = true;
         Show();
         WindowState = FormWindowState.Normal;
         TopMost = true;   // re-assert so it rises above browser windows
