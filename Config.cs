@@ -20,7 +20,7 @@ public class Config
                 var loaded = JsonSerializer.Deserialize<Config>(File.ReadAllText(_path));
                 if (loaded != null)
                 {
-                    // Ensure Urls always has exactly 4 slots
+                    // Ensure Urls always has exactly 9 slots
                     if (loaded.Urls.Length < 9)
                     {
                         var padded = Enumerable.Repeat("", 9).ToArray();

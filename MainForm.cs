@@ -35,11 +35,14 @@ public class MainForm : Form
     private NotifyIcon _tray = null!;
     private Label _status = null!;
     private bool _coverTaskbar = false;
+    private bool _layoutBusy = false;
+    private readonly System.Windows.Forms.Timer _statusTimer = new() { Interval = 3000 };
 
     public MainForm()
     {
         _audio = new AudioManager(() => _windows.AsReadOnly());
         _audio.Enabled = _config.AudioFollowsMouse;
+        _statusTimer.Tick += (_, _) => { _status.Text = ""; _statusTimer.Stop(); };
 
         SuspendLayout();
         BuildUI();
@@ -48,7 +51,10 @@ public class MainForm : Form
 
         Load += (_, _) =>
         {
-            RegisterHotKey(Handle, HK_TOGGLE, MOD_CTRL | MOD_ALT, VK_W);
+            if (!RegisterHotKey(Handle, HK_TOGGLE, MOD_CTRL | MOD_ALT, VK_W))
+                _tray.ShowBalloonTip(3000, "Sport Splitter",
+                    "Global hotkey Ctrl+Alt+W is unavailable (in use by another app). " +
+                    "Use the tray icon to open the panel.", ToolTipIcon.Warning);
             Hide(); // start hidden; user opens via tray icon or Ctrl+Alt+W
         };
     }
@@ -120,6 +126,15 @@ public class MainForm : Form
                 Font = new Font("Segoe UI", 9f)
             };
             box.TextChanged += (_, _) => { _config.Urls[idx] = box.Text.Trim(); _config.Save(); };
+            box.Leave += (_, _) => NavigateSlot(idx);
+            box.KeyDown += (_, e) =>
+            {
+                if (e.KeyCode == Keys.Enter)
+                {
+                    e.SuppressKeyPress = true;
+                    NavigateSlot(idx);
+                }
+            };
             _urlBoxes[i] = box;
             Add(box);
             y += S(30);
@@ -283,6 +298,22 @@ public class MainForm : Form
 
     private async Task ApplyLayoutAsync(LayoutType layout)
     {
+        // Awaits below yield to the message loop, so a second click could
+        // interleave and create duplicate windows.
+        if (_layoutBusy) return;
+        _layoutBusy = true;
+        try
+        {
+            await ApplyLayoutCoreAsync(layout);
+        }
+        finally
+        {
+            _layoutBusy = false;
+        }
+    }
+
+    private async Task ApplyLayoutCoreAsync(LayoutType layout)
+    {
         int count = layout switch
         {
             LayoutType.NineGrid => 9,
@@ -379,10 +410,7 @@ public class MainForm : Form
     {
         _audio.UnmuteAll();
         foreach (var w in _windows)
-        {
-            w.FormClosed -= null;  // allow real close
             w.Dispose();
-        }
         _windows.Clear();
         SetStatus("All windows closed.");
     }
@@ -427,12 +455,20 @@ public class MainForm : Form
         BringToFront();
     }
 
+    private void NavigateSlot(int idx)
+    {
+        if (idx >= _windows.Count) return;
+        var win = _windows[idx];
+        string url = _config.Urls[idx];
+        if (!string.IsNullOrWhiteSpace(url) && url != win.CurrentUrl)
+            win.NavigateTo(url);
+    }
+
     private void SetStatus(string msg)
     {
         _status.Text = msg;
-        var t = new System.Windows.Forms.Timer { Interval = 3000 };
-        t.Tick += (_, _) => { _status.Text = ""; t.Dispose(); };
-        t.Start();
+        _statusTimer.Stop();
+        _statusTimer.Start();
     }
 
     private Label SectionLabel(string text, int y, int pad) => new()

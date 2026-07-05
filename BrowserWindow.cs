@@ -77,15 +77,14 @@ public class BrowserWindow : Form
         return url;
     }
 
-    public async Task SetMutedAsync(bool muted)
+    public void SetMuted(bool muted)
     {
         if (!_initialized || _webView.CoreWebView2 == null) return;
         try
         {
-            string js = muted
-                ? "document.querySelectorAll('video,audio').forEach(e=>e.muted=true);"
-                : "document.querySelectorAll('video,audio').forEach(e=>e.muted=false);";
-            await _webView.ExecuteScriptAsync(js);
+            // IsMuted silences the whole browser instance, including iframes
+            // that script injection can't reach.
+            _webView.CoreWebView2.IsMuted = muted;
         }
         catch { }
     }
