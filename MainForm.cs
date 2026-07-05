@@ -24,6 +24,8 @@ public class MainForm : Form
     static readonly Color C_MUTED   = Color.FromArgb(0x88, 0x88, 0x88);
     static readonly Color C_BORDER  = Color.FromArgb(0x2a, 0x2a, 0x4a);
     static readonly Color C_LABEL   = Color.FromArgb(0x88, 0x99, 0xbb);
+    static readonly Color C_HOVER   = Color.FromArgb(0x0f, 0x34, 0x60);
+    static readonly Color C_PANE    = Color.FromArgb(0x2a, 0x4a, 0x7f);
 
     private static System.Drawing.Drawing2D.GraphicsPath RoundedRect(Rectangle r, int radius)
     {
@@ -37,6 +39,27 @@ public class MainForm : Form
         return path;
     }
 
+    // ── Modes ─────────────────────────────────────────────────────────────────
+    private static readonly (LayoutType Type, string Label)[] Modes =
+    {
+        (LayoutType.LeftRight, "2 Screens  —  Left / Right"),
+        (LayoutType.TopBottom, "2 Screens  —  Top / Bottom"),
+        (LayoutType.ThreeLeft, "3 Screens  —  Main Left"),
+        (LayoutType.ThreeTop,  "3 Screens  —  Main Top"),
+        (LayoutType.Quad,      "4 Screens  —  Quad Grid"),
+        (LayoutType.SixGrid,   "6 Screens  —  2 × 3 Grid"),
+        (LayoutType.NineGrid,  "9 Screens  —  3 × 3 Grid"),
+    };
+
+    private static int WindowCount(LayoutType layout) => layout switch
+    {
+        LayoutType.NineGrid => 9,
+        LayoutType.SixGrid  => 6,
+        LayoutType.Quad     => 4,
+        LayoutType.ThreeLeft or LayoutType.ThreeTop => 3,
+        _ => 2
+    };
+
     // ── State ─────────────────────────────────────────────────────────────────
     private float _dpiScale = 1f;
     private readonly Config _config = Config.Load();
@@ -44,6 +67,12 @@ public class MainForm : Form
     private CoreWebView2Environment? _env;
     private readonly AudioManager _audio;
     private readonly TextBox[] _urlBoxes = new TextBox[9];
+    private readonly NumberBadge[] _urlBadges = new NumberBadge[9];
+    private readonly UrlInputPanel[] _urlWraps = new UrlInputPanel[9];
+    private ComboBox _modeCombo = null!;
+    private Panel _scroll = null!;
+    private Panel _optionsPanel = null!;
+    private int _urlTop, _footerH;
     private NotifyIcon _tray = null!;
     private ToolStripMenuItem _updateItem = null!;
     private readonly UpdateService _updates = new();
@@ -129,12 +158,13 @@ public class MainForm : Form
         int y   = 0;
 
         // Scrollable content panel — fills the form, scrolls when content exceeds form height
-        var scroll = new Panel
+        _scroll = new Panel
         {
             Location  = Point.Empty,
             BackColor = C_BG,
             AutoScroll = true
         };
+        var scroll = _scroll;
         void Add(Control c) => scroll.Controls.Add(c);
 
         // Header — two-tone title, subtitle, gradient accent rule
@@ -176,16 +206,55 @@ public class MainForm : Form
         Add(header);
         y = headerH;
 
-        // URLs
+        // Mode — graphical dropdown + Start button
+        Add(SectionLabel("Mode", y + S(5), pad)); y += S(26);
+        int startW = S(100);
+        _modeCombo = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            DrawMode      = DrawMode.OwnerDrawFixed,
+            ItemHeight    = S(30),
+            FlatStyle     = FlatStyle.Flat,
+            BackColor     = C_SURFACE,
+            ForeColor     = C_TEXT,
+            Location      = new Point(pad, y),
+            Width         = W - pad * 2 - startW - S(10)
+        };
+        foreach (var m in Modes) _modeCombo.Items.Add(m.Label);
+        _modeCombo.DrawItem += DrawModeItem;
+        _modeCombo.SelectedIndexChanged += (_, _) =>
+        {
+            _config.LastLayout = SelectedLayout.ToString();
+            _config.Save();
+            UpdateUrlRows();
+        };
+        Add(_modeCombo);
+
+        int comboH = Math.Max(_modeCombo.Height, S(36));
+        var startBtn = new PillButton("Start")
+        {
+            Location = new Point(W - pad - startW, y),
+            Size = new Size(startW, comboH),
+            BackColor = C_BG
+        };
+        startBtn.Click += async (_, _) => await ApplyLayoutAsync(SelectedLayout);
+        Add(startBtn);
+        y += comboH + S(14);
+
+        // URLs — only the rows the selected mode needs are visible
+        Add(HRule(y, W)); y += 1;
         Add(SectionLabel("URLs", y + S(5), pad)); y += S(24);
+        _urlTop = y;
         for (int i = 0; i < 9; i++)
         {
             int idx = i;
-            Add(new NumberBadge(i + 1)
+            var badge = new NumberBadge(i + 1)
             {
                 Location = new Point(pad, y + S(4)), Size = new Size(S(18), S(18)),
                 BackColor = C_BG
-            });
+            };
+            _urlBadges[i] = badge;
+            Add(badge);
             var wrap = new UrlInputPanel
             {
                 Location = new Point(pad + S(24), y),
@@ -205,48 +274,21 @@ public class MainForm : Form
                 }
             };
             _urlBoxes[i] = box;
+            _urlWraps[i] = wrap;
             Add(wrap);
             y += S(32);
         }
-        y += S(4);
 
-        // Layout sections
-        int btnW2 = (W - pad * 2 - S(8)) / 2;
-
-        void LayoutSection(string title, Action addBtns, int btnH)
+        // Options — position depends on how many URL rows show; see UpdateUrlRows
+        _optionsPanel = new Panel
         {
-            Add(HRule(y, W)); y += 1;
-            Add(SectionLabel(title, y + S(5), pad)); y += S(24);
-            addBtns();
-            y += btnH + S(10);
-        }
-
-        LayoutSection("2 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.LeftRight, "Left / Right",   pad,                 y, btnW2, S(80));
-            AddLayoutBtn(scroll, LayoutType.TopBottom, "Top / Bottom",   pad + btnW2 + S(8),  y, btnW2, S(80));
-        }, S(80));
-
-        LayoutSection("3 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.ThreeLeft, "Main Left", pad,                 y, btnW2, S(80));
-            AddLayoutBtn(scroll, LayoutType.ThreeTop,  "Main Top",  pad + btnW2 + S(8),  y, btnW2, S(80));
-        }, S(80));
-
-        LayoutSection("4 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.Quad,    "Quad Grid",  pad, y, W - pad * 2, S(80));
-        }, S(80));
-
-        LayoutSection("6 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.SixGrid, "2 × 3 Grid", pad, y, W - pad * 2, S(100));
-        }, S(100));
-
-        LayoutSection("9 Windows", () => {
-            AddLayoutBtn(scroll, LayoutType.NineGrid, "3 × 3 Grid", pad, y, W - pad * 2, S(110));
-        }, S(110));
-
-        // Options
-        Add(HRule(y, W)); y += 1;
-        Add(SectionLabel("Options", y + S(5), pad)); y += S(24);
-        AddToggleRow(scroll, "Audio follows mouse", _config.AudioFollowsMouse, pad, y, W, out var audioToggle);
+            Size = new Size(W, S(6) + S(24) + S(32) + S(32) + S(8)),
+            BackColor = C_BG
+        };
+        _optionsPanel.Controls.Add(HRule(0, W));
+        _optionsPanel.Controls.Add(SectionLabel("Options", S(6), pad));
+        int oy = S(6) + S(24);
+        AddToggleRow(_optionsPanel, "Audio follows mouse", _config.AudioFollowsMouse, pad, oy, W, out var audioToggle);
         audioToggle.Toggled += on =>
         {
             _audio.Enabled = on;
@@ -254,11 +296,10 @@ public class MainForm : Form
             _config.Save();
             if (!on) _audio.UnmuteAll();
         };
-        y += S(32);
-        AddToggleRow(scroll, "Cover taskbar (fullscreen)", false, pad, y, W, out var taskbarToggle);
+        oy += S(32);
+        AddToggleRow(_optionsPanel, "Cover taskbar (fullscreen)", false, pad, oy, W, out var taskbarToggle);
         taskbarToggle.Toggled += on => _coverTaskbar = on;
-        y += S(32);
-        y += S(8);
+        Add(_optionsPanel);
 
         // ── Fixed footer (never scrolls away) ────────────────────────────────
         var ver = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
@@ -279,11 +320,19 @@ public class MainForm : Form
         footer.Controls.Add(new Panel { Location = Point.Empty, Size = new Size(W + SystemInformation.VerticalScrollBarWidth, 1), BackColor = Color.FromArgb(0x2a, 0x2a, 0x4a) });
         fy += S(10);
 
-        var closeBtn = new PillButton("Close All Windows")
+        int fBtnW = (W - pad * 2 - S(10)) / 2;
+        var frontBtn = new PillButton("Bring to Front")
         {
-            Location = new Point(pad, fy), Size = new Size(W - pad * 2, S(30)),
-            BackColor = C_BG,
-            Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top
+            Location = new Point(pad, fy), Size = new Size(fBtnW, S(30)),
+            BackColor = C_BG
+        };
+        frontBtn.Click += (_, _) => BringWindowsToFront();
+        footer.Controls.Add(frontBtn);
+
+        var closeBtn = new PillButton("Close All")
+        {
+            Location = new Point(pad + fBtnW + S(10), fy), Size = new Size(fBtnW, S(30)),
+            BackColor = C_BG
         };
         closeBtn.Click += (_, _) => CloseAllWindows();
         footer.Controls.Add(closeBtn);
@@ -307,14 +356,8 @@ public class MainForm : Form
         });
 
         // ── Size form ─────────────────────────────────────────────────────────
-        int sbW        = SystemInformation.VerticalScrollBarWidth;
-        int formW      = W + sbW;
-        var screen     = Screen.PrimaryScreen!.WorkingArea;
-        int nonClientH = SystemInformation.CaptionHeight
-                       + SystemInformation.FrameBorderSize.Height * 2;
-        int maxClientH = screen.Height - nonClientH - S(16);
-        int formH      = Math.Min(y + footerH, maxClientH);
-        ClientSize     = new Size(formW, formH);
+        _footerH = footerH;
+        ClientSize = new Size(W + SystemInformation.VerticalScrollBarWidth, S(400));
 
         // Allow free resize in both directions
         MinimumSize = new Size(S(320), S(300));
@@ -324,21 +367,80 @@ public class MainForm : Form
         Controls.Add(footer);
 
         scroll.Dock = DockStyle.Fill;
-        scroll.AutoScrollMinSize = new Size(0, y);
         Controls.Add(scroll);
 
+        // Restore last mode; SelectedIndexChanged fires UpdateUrlRows, which
+        // shows the right number of URL rows and sizes the form to fit.
+        int modeIdx = Array.FindIndex(Modes, m => m.Type.ToString() == _config.LastLayout);
+        _modeCombo.SelectedIndex = modeIdx >= 0 ? modeIdx : 0;
+
         // Position top-right; clamp so form never starts off the bottom of the screen
+        var screen = Screen.PrimaryScreen!.WorkingArea;
         int margin = S(16);
         int left   = screen.Right - Width - margin;
         int top    = Math.Min(screen.Top + margin, screen.Bottom - Height);
         Location   = new Point(left, top);
     }
 
-    private void AddLayoutBtn(Panel parent, LayoutType layout, string label, int x, int y, int w, int h)
+    private LayoutType SelectedLayout =>
+        _modeCombo.SelectedIndex >= 0 ? Modes[_modeCombo.SelectedIndex].Type : LayoutType.LeftRight;
+
+    private int Sc(int v) => (int)Math.Round(v * _dpiScale);
+
+    private void UpdateUrlRows()
     {
-        var btn = new LayoutButton(layout, label) { Location = new Point(x, y), Size = new Size(w, h) };
-        btn.Clicked += async () => await ApplyLayoutAsync(layout);
-        parent.Controls.Add(btn);
+        int count = WindowCount(SelectedLayout);
+        for (int i = 0; i < 9; i++)
+        {
+            _urlBadges[i].Visible = i < count;
+            _urlWraps[i].Visible  = i < count;
+        }
+
+        _scroll.AutoScrollPosition = Point.Empty;
+        _optionsPanel.Location = new Point(0, _urlTop + count * Sc(32) + Sc(4));
+
+        int contentH = _optionsPanel.Bottom + Sc(4);
+        _scroll.AutoScrollMinSize = new Size(0, contentH);
+
+        // Shrink or grow the form to fit the visible content
+        var screen     = Screen.PrimaryScreen!.WorkingArea;
+        int nonClientH = SystemInformation.CaptionHeight
+                       + SystemInformation.FrameBorderSize.Height * 2;
+        int maxClientH = screen.Height - nonClientH - Sc(16);
+        ClientSize = new Size(ClientSize.Width, Math.Min(contentH + _footerH, maxClientH));
+        if (Bottom > screen.Bottom)
+            Top = Math.Max(screen.Top, screen.Bottom - Height);
+    }
+
+    private void DrawModeItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0) return;
+        var g = e.Graphics;
+        bool hot    = (e.State & DrawItemState.Selected) != 0;
+        bool inList = (e.State & DrawItemState.ComboBoxEdit) == 0;
+        var bgColor = hot && inList ? C_HOVER : C_SURFACE;
+        using (var bg = new SolidBrush(bgColor))
+            g.FillRectangle(bg, e.Bounds);
+
+        var (type, label) = Modes[e.Index];
+        int m  = Sc(5);
+        int ph = e.Bounds.Height - m * 2;
+        int pw = ph * 16 / 9;
+        var prev = new Rectangle(e.Bounds.X + Sc(8), e.Bounds.Y + m, pw, ph);
+        using (var fill = new SolidBrush(C_PANE))
+        using (var gap  = new Pen(bgColor, 2))
+            DrawLayoutPreview(g, fill, gap, prev, type);
+
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        using var brush = new SolidBrush(C_TEXT);
+        using var sf = new StringFormat
+        {
+            LineAlignment = StringAlignment.Center,
+            Trimming = StringTrimming.EllipsisCharacter
+        };
+        g.DrawString(label, Font, brush,
+            new RectangleF(prev.Right + Sc(10), e.Bounds.Y,
+                e.Bounds.Right - prev.Right - Sc(12), e.Bounds.Height), sf);
     }
 
     private void AddToggleRow(Panel parent, string text, bool on, int pad, int y, int W, out ToggleButton toggle)
@@ -401,14 +503,7 @@ public class MainForm : Form
 
     private async Task ApplyLayoutCoreAsync(LayoutType layout)
     {
-        int count = layout switch
-        {
-            LayoutType.NineGrid => 9,
-            LayoutType.SixGrid  => 6,
-            LayoutType.Quad     => 4,
-            LayoutType.ThreeLeft or LayoutType.ThreeTop => 3,
-            _ => 2
-        };
+        int count = WindowCount(layout);
 
         SetStatus("Opening windows...");
 
@@ -490,6 +585,9 @@ public class MainForm : Form
         for (int i = count; i < _windows.Count; i++)
             _windows[i].Hide();
 
+        // Surface the freshly arranged windows above everything else
+        BringWindowsToFront();
+
         SetStatus($"{count} windows arranged.");
     }
 
@@ -529,8 +627,16 @@ public class MainForm : Form
 
     private void BringWindowsToFront()
     {
+        // BringToFront()/Activate() are ignored by Windows when another app
+        // holds the foreground. A TopMost pulse forces the window above every
+        // non-topmost window regardless, then settles it back into the normal
+        // band so dialogs and the panel can still cover it.
         foreach (var w in _windows)
-            if (w.Visible) { w.BringToFront(); w.Activate(); }
+        {
+            if (!w.Visible) continue;
+            w.TopMost = true;
+            w.TopMost = false;
+        }
     }
 
     private void ShowPanel()
@@ -633,126 +739,59 @@ public class MainForm : Form
         base.OnFormClosing(e);
     }
 
-    // ── Nested Controls ───────────────────────────────────────────────────────
-
-    private sealed class LayoutButton : Control
+    private static void DrawLayoutPreview(Graphics g, SolidBrush fill, Pen gap,
+        Rectangle r, LayoutType layout)
     {
-        static readonly Color C_BG         = Color.FromArgb(0x16, 0x21, 0x3e);
-        static readonly Color C_HOVER      = Color.FromArgb(0x0f, 0x34, 0x60);
-        static readonly Color C_PANE       = Color.FromArgb(0x2a, 0x4a, 0x7f);
-        static readonly Color C_PANE_HOVER = Color.FromArgb(0xb8, 0x37, 0x4d);
-        static readonly Color C_TEXT       = Color.FromArgb(0xea, 0xea, 0xea);
-        static readonly Color C_BORDER     = Color.FromArgb(0x2a, 0x2a, 0x5a);
+        int l = r.Left, t = r.Top, w = r.Width, h = r.Height;
+        int hw = w / 2, hh = h / 2;
 
-        private bool _hover;
-        public event Action? Clicked;
-        private readonly LayoutType _layout;
-        public string Label { get; }
-
-        public LayoutButton(LayoutType layout, string label)
+        void Pane(int x, int y, int pw, int ph)
         {
-            _layout = layout; Label = label;
-            Cursor = Cursors.Hand;
-            DoubleBuffered = true;
+            g.FillRectangle(fill, x, y, pw, ph);
+            g.DrawRectangle(gap, x, y, pw, ph);
         }
 
-        protected override void OnMouseEnter(EventArgs e) { _hover = true;  Invalidate(); }
-        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); }
-        protected override void OnClick(EventArgs e) { base.OnClick(e); Clicked?.Invoke(); }
-
-        protected override void OnPaint(PaintEventArgs e)
+        switch (layout)
         {
-            var g = e.Graphics;
-            float dpi = DeviceDpi / 96f;
-
-            var rect = new Rectangle(0, 0, Width - 1, Height - 1);
-            using (var path = RoundedRect(rect, (int)Math.Round(8 * dpi)))
-            {
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                using (var fill = new SolidBrush(_hover ? C_HOVER : C_BG))
-                    g.FillPath(fill, path);
-                using (var borderPen = new Pen(_hover ? C_ACCENT : C_BORDER))
-                    g.DrawPath(borderPen, path);
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.None;
-            }
-
-            // Draw layout preview using 16:9 aspect ratio, centered in the top portion
-            int labelH  = (int)Math.Round(22 * dpi);
-            int margin  = (int)Math.Round(8 * dpi);
-            int availW  = Width  - margin * 2;
-            int availH  = Height - labelH - margin * 2;
-            // Fit a 16:9 rectangle inside available area
-            int pw = availW;
-            int ph = pw * 9 / 16;
-            if (ph > availH) { ph = availH; pw = ph * 16 / 9; }
-            int px = margin + (availW - pw) / 2;
-            int py = margin + (availH - ph) / 2;
-            var previewRect = new Rectangle(px, py, pw, ph);
-
-            using var paneBrush = new SolidBrush(_hover ? C_PANE_HOVER : C_PANE);
-            using var panePen   = new Pen(_hover ? C_HOVER : C_BG, 2);
-            DrawLayoutPreview(g, paneBrush, panePen, previewRect, _layout);
-
-            // Label
-            using var sf   = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-            using var font = new Font("Segoe UI", 8f);
-            using var textBrush = new SolidBrush(C_TEXT);
-            g.DrawString(Label, font, textBrush,
-                new RectangleF(0, Height - labelH, Width, labelH), sf);
-        }
-
-        private static void DrawLayoutPreview(Graphics g, SolidBrush fill, Pen gap,
-            Rectangle r, LayoutType layout)
-        {
-            int l = r.Left, t = r.Top, w = r.Width, h = r.Height;
-            int hw = w / 2, hh = h / 2;
-
-            void Pane(int x, int y, int pw, int ph)
-            {
-                g.FillRectangle(fill, x, y, pw, ph);
-                g.DrawRectangle(gap, x, y, pw, ph);
-            }
-
-            switch (layout)
-            {
-                case LayoutType.LeftRight:
-                    Pane(l, t, hw - 1, h); Pane(l + hw + 1, t, w - hw - 2, h); break;
-                case LayoutType.TopBottom:
-                    Pane(l, t, w, hh - 1); Pane(l, t + hh + 1, w, h - hh - 2); break;
-                case LayoutType.ThreeLeft:
-                    Pane(l, t, hw - 1, h);
-                    Pane(l + hw + 1, t, w - hw - 2, hh - 1);
-                    Pane(l + hw + 1, t + hh + 1, w - hw - 2, h - hh - 2); break;
-                case LayoutType.ThreeTop:
-                    Pane(l, t, w, hh - 1);
-                    Pane(l, t + hh + 1, hw - 1, h - hh - 2);
-                    Pane(l + hw + 1, t + hh + 1, w - hw - 2, h - hh - 2); break;
-                case LayoutType.Quad:
-                    Pane(l, t, hw - 1, hh - 1);
-                    Pane(l + hw + 1, t, w - hw - 2, hh - 1);
-                    Pane(l, t + hh + 1, hw - 1, h - hh - 2);
-                    Pane(l + hw + 1, t + hh + 1, w - hw - 2, h - hh - 2); break;
-                case LayoutType.SixGrid:
-                    for (int row = 0; row < 3; row++)
-                    for (int col = 0; col < 2; col++)
-                    {
-                        int px = l + col * w / 2, py = t + row * h / 3;
-                        int pw = w / 2 - 1,       ph = h / 3 - 1;
-                        Pane(px + 1, py + 1, pw - 1, ph - 1);
-                    }
-                    break;
-                case LayoutType.NineGrid:
-                    for (int row = 0; row < 3; row++)
-                    for (int col = 0; col < 3; col++)
-                    {
-                        int px = l + col * w / 3, py = t + row * h / 3;
-                        int pw = w / 3 - 1,       ph = h / 3 - 1;
-                        Pane(px + 1, py + 1, pw - 1, ph - 1);
-                    }
-                    break;
-            }
+            case LayoutType.LeftRight:
+                Pane(l, t, hw - 1, h); Pane(l + hw + 1, t, w - hw - 2, h); break;
+            case LayoutType.TopBottom:
+                Pane(l, t, w, hh - 1); Pane(l, t + hh + 1, w, h - hh - 2); break;
+            case LayoutType.ThreeLeft:
+                Pane(l, t, hw - 1, h);
+                Pane(l + hw + 1, t, w - hw - 2, hh - 1);
+                Pane(l + hw + 1, t + hh + 1, w - hw - 2, h - hh - 2); break;
+            case LayoutType.ThreeTop:
+                Pane(l, t, w, hh - 1);
+                Pane(l, t + hh + 1, hw - 1, h - hh - 2);
+                Pane(l + hw + 1, t + hh + 1, w - hw - 2, h - hh - 2); break;
+            case LayoutType.Quad:
+                Pane(l, t, hw - 1, hh - 1);
+                Pane(l + hw + 1, t, w - hw - 2, hh - 1);
+                Pane(l, t + hh + 1, hw - 1, h - hh - 2);
+                Pane(l + hw + 1, t + hh + 1, w - hw - 2, h - hh - 2); break;
+            case LayoutType.SixGrid:
+                for (int row = 0; row < 3; row++)
+                for (int col = 0; col < 2; col++)
+                {
+                    int px = l + col * w / 2, py = t + row * h / 3;
+                    int pw = w / 2 - 1,       ph = h / 3 - 1;
+                    Pane(px + 1, py + 1, pw - 1, ph - 1);
+                }
+                break;
+            case LayoutType.NineGrid:
+                for (int row = 0; row < 3; row++)
+                for (int col = 0; col < 3; col++)
+                {
+                    int px = l + col * w / 3, py = t + row * h / 3;
+                    int pw = w / 3 - 1,       ph = h / 3 - 1;
+                    Pane(px + 1, py + 1, pw - 1, ph - 1);
+                }
+                break;
         }
     }
+
+    // ── Nested Controls ───────────────────────────────────────────────────────
 
     private sealed class ToggleButton : Control
     {

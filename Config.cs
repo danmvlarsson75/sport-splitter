@@ -6,6 +6,7 @@ public class Config
 {
     public string[] Urls { get; set; } = ["", "", "", "", "", "", "", "", ""];
     public bool AudioFollowsMouse { get; set; } = false;
+    public string LastLayout { get; set; } = "LeftRight";
 
     private static readonly string _path = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
