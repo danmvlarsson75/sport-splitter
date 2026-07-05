@@ -12,7 +12,7 @@
     <Product>Sport Splitter</Product>
     <Company>Dan Larsson</Company>
     <Description>Tile multiple sports streams across your screen using borderless browser windows.</Description>
-    <Copyright>Copyright Â© Dan Larsson 2025</Copyright>
+    <Copyright>Copyright © Dan Larsson 2025</Copyright>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>icons\app.ico</ApplicationIcon>

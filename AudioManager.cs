@@ -36,13 +36,13 @@ public class AudioManager : IDisposable
         _lastActive = active;
 
         foreach (var w in windows)
-            _ = w.SetMutedAsync(w != active);
+            w.SetMuted(w != active);
     }
 
     public void UnmuteAll()
     {
         foreach (var w in _getWindows())
-            _ = w.SetMutedAsync(false);
+            w.SetMuted(false);
         _lastActive = null;
     }
 
